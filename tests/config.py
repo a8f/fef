@@ -12,7 +12,7 @@ test_file_finder_config = {
     "password": None,
     "no_symlinks": False,
     "hard": False,
-    "keyfile": "test_rsa_key",
+    "keyfile": os.path.join("tests", "test_rsa_key"),
     "verbosity": 2,
     "clean": False,
     "hash_function": "sha1",
