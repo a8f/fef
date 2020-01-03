@@ -221,13 +221,13 @@ class FileFinder:
         # Bind function to this self.local_hash
         self.local_hash = MethodType(local_hash, self)
 
-    def remote_path_join(*parts) -> str:
+    def remote_path_join(self, *parts) -> str:
         """Joins parts using the remote's path separator"""
         # TODO support Windows servers by getting correct separator in init
         if len(parts) == 1:
             return parts
         path = ""
-        for p in parts[:-1]:
+        for p in parts:
             path += "/" + p.lstrip("/")
         return path
 
@@ -266,11 +266,13 @@ print(algorithms_available)" """
         while exists:
             try:
                 self.sftp.stat(
-                    self.remote_path_join(self.remote_path, "/hash", str(suffix), ".py")
+                    self.remote_path_join(
+                        self.remote_path, "hash" + str(suffix) + ".py"
+                    )
                 )
             except IOError:
                 exists = False
-        filename = self.remote_path_join(self.remote_path, "/hash", str(suffix), ".py")
+        filename = self.remote_path_join(self.remote_path, "hash" + str(suffix) + ".py")
         # TODO handle not having write permissions
         self.sftp.putfo(BytesIO(self.get_hash_script_body().encode()), filename)
         return filename
