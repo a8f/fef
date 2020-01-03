@@ -8,17 +8,6 @@ To install Paramiko, use `pip install paramiko`
 
 Then `git clone https://github.com/a8f/fef && cd fef`
 
-### Limitations
-The following cases have undefined behaviour (which may include data loss) and will likely never be supported:
-  - Multiple files or directories in the same directory with the same name
-  - File names ending with a newline
-  - File/directory names with a forward slash in them
-  - File/directory names with a backslash in them when using a Windows client
-
-The following cases are currently unsupported but may be supported in the future:
-  - Different encoding on the client and server
-  - Only Python 2 on the server (not Python 3)
-
 ### Usage
 `./fef.py <user@host:port> <remote-dir> <local-dir>` where `<local-dir>` is the directory
 to look for files in. To specify a directory to clone into (i.e. where you will rsync to after fef completes) use `-o <out-dir>`.
@@ -31,6 +20,16 @@ Other common flags are:
 
 Full usage instructions can be found by running `./fef.py --help`
 
+### Limitations
+The following cases have undefined behaviour (which may include data loss) and will likely never be supported:
+  - Multiple files or directories in the same directory with the same name
+  - File names ending with a newline
+  - File/directory names with a forward slash in them
+  - File/directory names with a backslash in them when using a Windows client
+
+The following cases are currently unsupported but may be supported in the future:
+  - Different encoding on the client and server
+  - Only Python 2 on the server (not Python 3)
 
 ### Contributing
 ~~Pull requests are welcome. Code should be formatted with [Black](https://github.com/psf/black).~~ fef is currently a WIP. Pull requests will be considered after basic functionality is complete.
