@@ -109,12 +109,6 @@ def get_parser() -> argparse.ArgumentParser:
         "If possible you should instead use -k or enter a password interactively",
     )
     parser.add_argument(
-        "-r",
-        "--recursive",
-        action="store_true",
-        help="Recursively copy directories in remote-dir",
-    )
-    parser.add_argument(
         "-v",
         "--verbosity",
         action="store",

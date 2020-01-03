@@ -27,7 +27,6 @@ Other common flags are:
 
     -s, --no-symlinks     Don't create symbolic links when moving files
     -d, --hard            Create hard links instead of symbolic links when moving files
-    -r, --recursive       Recursively copy directories in remote-dir
     -k <keyfile>          SSH key file to use for connecting to the host
 
 Full usage instructions can be found by running `./fef.py --help`
