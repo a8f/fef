@@ -1,0 +1,3 @@
+pytest
+paramiko
+git+git://github.com/a8f/mock-ssh-server#egg=mock-ssh-server

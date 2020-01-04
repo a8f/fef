@@ -80,10 +80,10 @@ def get_parser() -> argparse.ArgumentParser:
     )
     link_group = parser.add_mutually_exclusive_group()
     link_group.add_argument(
-        "-l",
-        "--no-symlinks",
+        "-s",
+        "--symlinks",
         action="store_false",
-        help="Don't create symbolic links when moving files",
+        help="Create symbolic links when moving files",
     )
     link_group.add_argument(
         "-d",
@@ -107,12 +107,6 @@ def get_parser() -> argparse.ArgumentParser:
         "This is insecure and should be avoided! "
         "Your password will be visible to anybody who can access your shell history. "
         "If possible you should instead use -k or enter a password interactively",
-    )
-    parser.add_argument(
-        "-r",
-        "--recursive",
-        action="store_true",
-        help="Recursively copy directories in remote-dir",
     )
     parser.add_argument(
         "-v",

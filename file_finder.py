@@ -16,15 +16,17 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 """
 
-from ast import literal_eval
-from getpass import getpass
 import hashlib
 import os.path
+import shutil
 import subprocess
-from socket import gaierror
 import sys
+from ast import literal_eval
+from getpass import getpass
+from io import BytesIO
+from socket import gaierror
 from types import MethodType
-from typing import Optional, Dict, List, Tuple, Callable, Set
+from typing import Callable, Dict, List, Optional, Set, Tuple
 
 import paramiko
 
@@ -38,17 +40,17 @@ class FileFinder:
         port: int,
         username: str,
         out_dir: str,
-        no_symlinks: bool,
+        symlinks: bool,
         hard: bool,
         keyfile: str,
         password: str,
-        recursive: bool,
         verbosity: bool,
         clean: bool,
         hash_function: str,
         copy: bool,
         req_existing_hostkey: bool,
         no_local_keys: bool,
+        no_file_attributes: bool,
     ):
         """
         Initialize class attributes, prompting the user for a password if required,
@@ -91,6 +93,8 @@ class FileFinder:
         if not os.path.isdir(local_dir):
             raise ValueError("Local directory " + local_dir + " doesn't exist")
         self.local_path = os.path.abspath(local_dir)
+        if self.local_path[-1] != os.path.sep:
+            self.local_path += os.path.sep
 
         """Remote directory (to be validated on connecting)"""
         self.remote_path = remote_dir
@@ -121,7 +125,7 @@ class FileFinder:
             )
 
         """Link options (hard/soft)"""
-        self.symlink = not (hard or no_symlinks)
+        self.symlink = symlinks
         self.hardlink = hard
 
         """Authentication"""
@@ -142,11 +146,11 @@ class FileFinder:
             raise ValueError("Unsupported hash function " + hash_function)
 
         """Remaining options"""
-        self.recursive = recursive
         self.verbosity = verbosity
         self.clean = clean
         self.use_local_keys = not no_local_keys
         self.existing_hostkey = req_existing_hostkey
+        self.copy_file_attributes = not no_file_attributes
         # TODO add option to set these
         # Max #bytes of file to read into memory at once
         self.read_size = 2 ** 16  # 64k
@@ -175,12 +179,20 @@ class FileFinder:
                 )
             )
 
+        # Make hashing script if possible
+        self.remote_hash_script = self.create_hash_script()
+        if self.remote_hash_script is None:
+            self.remote_hash = self.remote_hash_command_line
+        else:
+            self.set_remote_hash_function_to_script(self.remote_hash_script)
+
         """Dicts for tracking local file hashes"""
-        # First is a dict of filesize->paths for all files of a certain size
+        # Dict of filesize->paths for all files of a certain size
         # so that we only compute hashes of files that may actually be a match
         # (since they should have the same size if they hash to the same value)
-        self.file_sizes = self.generate_filesize_map()
-        # Then a dict of path->hash which stores the actual hashes for each file
+        # Computed in self.run() using self.generate_filesize_map()
+        self.file_sizes = {}
+        # Dict of path->hash which stores the actual hashes for each file
         # (computed ad hoc during self.run())
         self.file_hashes = {}
 
@@ -210,8 +222,18 @@ class FileFinder:
                         return hasher.hexdigest()
                     hasher.update(data)
 
-        # Bind function to this object
+        # Bind function to this self.local_hash
         self.local_hash = MethodType(local_hash, self)
+
+    def remote_path_join(self, *parts) -> str:
+        """Joins parts using the remote's path separator"""
+        # TODO support Windows servers by getting correct separator in init
+        if len(parts) == 1:
+            return parts
+        path = ""
+        for p in parts:
+            path += "/" + p.lstrip("/")
+        return path
 
     def remote_supported_hash_functions(self) -> Set[str]:
         """
@@ -230,6 +252,52 @@ print(algorithms_available)" """
         # TODO support log files
         if self.verbosity > 1:
             print(msg, **kwargs)
+
+    def create_hash_script(self) -> Optional[str]:
+        """
+        Creates hash script in remote_path which takes a filename as an argument
+        Returns the name of the hash script in remote_dir or None if unable to
+        create the script
+        """
+        # Find filename that doesn't exist
+        # TODO handle not having read permissions
+        exists = True
+        try:
+            self.sftp.stat(self.remote_path_join(self.remote_path, "/hash.py"))
+        except IOError:
+            exists = False
+        suffix = 0
+        while exists:
+            try:
+                self.sftp.stat(
+                    self.remote_path_join(
+                        self.remote_path, "hash" + str(suffix) + ".py"
+                    )
+                )
+            except IOError:
+                exists = False
+        filename = self.remote_path_join(self.remote_path, "hash" + str(suffix) + ".py")
+        # TODO handle not having write permissions
+        self.sftp.putfo(BytesIO(self.get_hash_script_body().encode()), filename)
+        return filename
+
+    def get_hash_script_body(self) -> str:
+        """
+        Returns a string of the contents of the hash script file to put
+        on the remote server
+        """
+        return """from hashlib import {}
+from sys import argv
+hasher = {}()
+with open(argv[1], 'rb') as file:
+    while True:
+        data = file.read({})
+        if not data:
+            print(hasher.hexdigest())
+            break
+        hasher.update(data)""".format(
+            self.hash_method, self.hash_method, self.remote_read_size,
+        )
 
     def connect(self) -> Optional[str]:
         """
@@ -296,12 +364,27 @@ print(algorithms_available)" """
             return str(e) + " (" + self.hostname + ")"
         self.sftp = self.ssh.open_sftp()
 
+    def set_remote_hash_function_to_script(self, script_remote_path: str) -> None:
+        # Create hash function
+        def remote_hash(self, filename: str) -> str:
+            _, result, _ = self.ssh.exec_command(
+                "python3 " + script_remote_path + " " + filename
+            )
+            return result.read().decode().lstrip().rstrip()
+
+        # Bind function to self.remote_hash
+        self.remote_hash = MethodType(remote_hash, self)
+
     def run(self) -> bool:
         """
         Do the file finding/moving
         Returns True on success
         On failure, prints error messages and returns False
         """
+
+        self.file_sizes = self.generate_filesize_map()
+        self.file_hashes = {}
+
         remote_files = self.get_remote_filenames()
         # Dict of (new file path -> (current file path, remote file stat))
         # (computed in entirety before actually modifying any data)
@@ -311,25 +394,31 @@ print(algorithms_available)" """
         if not os.path.isdir(self.out_path):
             os.mkdir(self.out_path)
 
+        """Find matching files"""
         for rpath, rfile in remote_files:
             stat = self.sftp.stat(os.path.join(rpath, rfile))
             same_size = self.file_sizes.get(stat.st_size)
             if same_size is None:
                 continue
-            rhash = self.remote_hash(rpath, rfile)
+            # TODO the remote hashes can be computed asynchronously for all remote files
+            rhash = self.remote_hash(self.remote_path_join(rpath, rfile))
             # TODO handle duplicate files
             for f in same_size:
                 if self.local_hash(f) == rhash:
                     self.log(
                         "Matched file " + f + " with remote file " + rpath + "/" + rfile
                     )
-                    files_to_move[self.local_path_from_remote(rpath)] = (f, stat)
+                    new_path = self.local_path_from_remote(
+                        self.remote_path_join(rpath, rfile)
+                    )
+                    files_to_move[new_path] = (f, stat)
 
-        # TODO Check for case where a file will be moved to a location that is actually
-        # a directory before modifying any data. This can only happen if the remote
-        # has a directory and a file in the same location with the same name
+        """Validate file moves are internally consistent"""
         for new_path, (old_path, stat) in files_to_move.items():
             cur = ""
+            # Check for case where a file will be moved to a location that is actually
+            # a directory before modifying any data. This can only happen if the remote
+            # has a directory and a file in the same location with the same name
             # TODO make sure this works with windows paths (drive letter)
             for d in new_path.split(os.path.sep):
                 cur = os.path.join(cur, d)
@@ -342,11 +431,16 @@ print(algorithms_available)" """
                         )
                     )
 
-        # Actually move the files
-        for new_path, (old_path, stat) in files_to_move:
+        """Actually move the files"""
+        for new_path, (old_path, stat) in files_to_move.items():
             self.move_file(old_path, new_path)
             # TODO add an option to specify what parts of stat to copy
             # TODO copy whatever parts of stat are specified (e.g. perms)
+
+        """Clean up"""
+        # Remove hash script from remote
+        if self.remote_hash_script is not None:
+            self.sftp.remove(self.remote_hash_script)
         return True
 
     def local_hash(self, file_path: str) -> str:
@@ -362,13 +456,10 @@ print(algorithms_available)" """
         self.file_hashes[new_hash] = file_path
         return new_hash
 
-    def remote_hash(self, path: str, file: str) -> str:
+    def remote_hash_command_line(self, path: str, file: str) -> str:
         """
-        Hash the file at path/file on the remote server
+        Hash the file at path/file on the remote server using python3 -c
         """
-        # TODO in __init__, check if we have write permissions to
-        # some directory. If we do then generate a script on the remote
-        # and just call that every time instead of calling python -c
         hash_command = """python3 -c "from hashlib import {}
 hasher = {}()
 with open('{}', 'rb') as file:
@@ -380,7 +471,7 @@ with open('{}', 'rb') as file:
         hasher.update(data)" """.format(
             self.hash_method,
             self.hash_method,
-            os.path.join(path, file),
+            self.remote_path_join(path, file),
             self.remote_read_size,
         )
         _, result, _ = self.ssh.exec_command(hash_command)
@@ -388,9 +479,7 @@ with open('{}', 'rb') as file:
 
     def local_path_from_remote(self, path: str) -> None:
         """
-        Creates the equivalent of path on the remote server as a directory
-        in the local server
-        Returns the equivalent local path
+        Returns the equivalent local path for path on remote
         """
         assert path.startswith(self.remote_path)
         split = path[len(self.remote_path) :].split("/")[1:]
@@ -402,15 +491,17 @@ with open('{}', 'rb') as file:
                     raise FileExistsError("Directory " + cur + " is a file")
         return cur
 
-    def create_local_path(self, path: str) -> None:
+    def create_path_for_file(self, file_path: str) -> None:
         """
-        Create all the parts of path
+        Create all the containing directories of file_path on the local machine
         """
-        dirs = path.split(os.path.sep)
+        dirs = file_path.split(os.path.sep)
         # TODO handle Windows-style paths (where dirs[0]/dirs[1] will be messed up
         # using this method since the drive letter is root)
-        cur = ""
-        for d in dirs:
+        cur = "/" if file_path[0] == "/" else ""
+        for d in dirs[:-1]:  # dirs[-1] is the file name
+            if len(d) == 0:
+                continue
             cur = os.path.join(cur, d)
             if not os.path.isdir(cur):
                 os.mkdir(cur)
@@ -433,4 +524,6 @@ with open('{}', 'rb') as file:
         Removes the directory of local_file_path if self.clean
         """
         # TODO
-        print("move local file {} to {}".format(local_file_path, new_file_path))
+        self.create_path_for_file(new_file_path)
+        shutil.move(local_file_path, new_file_path)
+        self.log("Moved local file {} to {}".format(local_file_path, new_file_path))
