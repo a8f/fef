@@ -2,7 +2,7 @@ from random import randint
 import os
 import tempfile
 
-test_file_finder_config = {
+default_config = {
     "host": "127.0.0.1",
     "remote_dir": tempfile.mkdtemp(),
     "local_dir": tempfile.mkdtemp(),
@@ -21,3 +21,13 @@ test_file_finder_config = {
     "no_local_keys": False,
     "no_file_attributes": False,
 }
+
+
+def new_config():
+    config = default_config.copy()
+    config["remote_dir"] = tempfile.mkdtemp()
+    config["local_dir"] = tempfile.mkdtemp()
+    out_dir = tempfile.mkdtemp()
+    os.rmdir(out_dir)
+    config["out_dir"] = out_dir
+    return config

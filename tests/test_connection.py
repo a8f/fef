@@ -1,5 +1,2 @@
-from .fixtures import *
-
-
-def test_connection_with_keyfile(ssh_server_with_keyfile, file_finder):
-    assert True
+def test_connection_with_keyfile(ssh_server, file_finder):
+    assert file_finder.ssh is not None

@@ -21,6 +21,7 @@ from getpass import getpass
 import hashlib
 from io import BytesIO
 import os.path
+import shutil
 import subprocess
 from socket import gaierror
 import sys
@@ -92,6 +93,8 @@ class FileFinder:
         if not os.path.isdir(local_dir):
             raise ValueError("Local directory " + local_dir + " doesn't exist")
         self.local_path = os.path.abspath(local_dir)
+        if self.local_path[-1] != os.path.sep:
+            self.local_path += os.path.sep
 
         """Remote directory (to be validated on connecting)"""
         self.remote_path = remote_dir
@@ -184,17 +187,21 @@ class FileFinder:
             self.set_remote_hash_function_to_script(script)
 
         """Dicts for tracking local file hashes"""
-        # First is a dict of filesize->paths for all files of a certain size
+        # Dict of filesize->paths for all files of a certain size
         # so that we only compute hashes of files that may actually be a match
         # (since they should have the same size if they hash to the same value)
-        self.file_sizes = self.generate_filesize_map()
-        # Then a dict of path->hash which stores the actual hashes for each file
+        # Computed in self.run() using self.generate_filesize_map()
+        self.file_sizes = {}
+        # Dict of path->hash which stores the actual hashes for each file
         # (computed ad hoc during self.run())
         self.file_hashes = {}
 
     def generate_filesize_map(self) -> Dict[int, List[str]]:
+        print("generating filesize map for " + self.local_path)
+        print(os.listdir(self.local_path))
         sizes = {}
         for root, _, files in os.walk(self.local_path):
+            print("file", root, files)
             for file in files:
                 size = os.path.getsize(os.path.join(root, file))
                 if size in sizes:
@@ -377,6 +384,10 @@ with open(argv[1], 'rb') as file:
         Returns True on success
         On failure, prints error messages and returns False
         """
+
+        self.file_sizes = self.generate_filesize_map()
+        self.file_hashes = {}
+
         remote_files = self.get_remote_filenames()
         # Dict of (new file path -> (current file path, remote file stat))
         # (computed in entirety before actually modifying any data)
@@ -386,25 +397,30 @@ with open(argv[1], 'rb') as file:
         if not os.path.isdir(self.out_path):
             os.mkdir(self.out_path)
 
+        """Find matching files"""
         for rpath, rfile in remote_files:
             stat = self.sftp.stat(os.path.join(rpath, rfile))
             same_size = self.file_sizes.get(stat.st_size)
             if same_size is None:
                 continue
-            rhash = self.remote_hash(rpath, rfile)
+            rhash = self.remote_hash(self.remote_path_join(rpath, rfile))
             # TODO handle duplicate files
             for f in same_size:
                 if self.local_hash(f) == rhash:
                     self.log(
                         "Matched file " + f + " with remote file " + rpath + "/" + rfile
                     )
-                    files_to_move[self.local_path_from_remote(rpath)] = (f, stat)
+                    new_path = self.local_path_from_remote(
+                        self.remote_path_join(rpath, rfile)
+                    )
+                    files_to_move[new_path] = (f, stat)
 
-        # TODO Check for case where a file will be moved to a location that is actually
-        # a directory before modifying any data. This can only happen if the remote
-        # has a directory and a file in the same location with the same name
+        """Validate file moves are internally consistent"""
         for new_path, (old_path, stat) in files_to_move.items():
             cur = ""
+            # Check for case where a file will be moved to a location that is actually
+            # a directory before modifying any data. This can only happen if the remote
+            # has a directory and a file in the same location with the same name
             # TODO make sure this works with windows paths (drive letter)
             for d in new_path.split(os.path.sep):
                 cur = os.path.join(cur, d)
@@ -417,8 +433,8 @@ with open(argv[1], 'rb') as file:
                         )
                     )
 
-        # Actually move the files
-        for new_path, (old_path, stat) in files_to_move:
+        """Actually move the files"""
+        for new_path, (old_path, stat) in files_to_move.items():
             self.move_file(old_path, new_path)
             # TODO add an option to specify what parts of stat to copy
             # TODO copy whatever parts of stat are specified (e.g. perms)
@@ -505,4 +521,5 @@ with open('{}', 'rb') as file:
         Removes the directory of local_file_path if self.clean
         """
         # TODO
+        shutil.move(local_file_path, new_file_path)
         print("move local file {} to {}".format(local_file_path, new_file_path))

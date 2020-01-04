@@ -1,5 +1,6 @@
-# fef: Find Existing Files
+# fef: Find Existing Files [![Build Status](https://travis-ci.org/a8f/fef.svg?branch=master)](https://travis-ci.org/a8f/fef)
 Copy existing files to a directory structure matching a remote server, (optionally) maintaining the original directory structure with symbolic (or hard) links. Originally created to be used before running `rsync -a`. Currently only UNIX servers are supported.
+
 
 ### Installation
 Requires Python 3.6+ and the [Paramiko](http://www.paramiko.org/installing.html) module.
