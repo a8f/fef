@@ -31,6 +31,3 @@ The following cases have undefined behaviour (which may include data loss) and w
 The following cases are currently unsupported but may be supported in the future:
   - Different encoding on the client and server
   - Only Python 2 on the server (not Python 3)
-
-### Contributing
-~~Pull requests are welcome. Code should be formatted with [Black](https://github.com/psf/black) and pass all existing tests. For pull requests adding additional functionality, new tests should be added to the tests/ directory for that functionality. See tests/ for examples  of test formatting.~~ fef is currently a WIP. Pull requests will be considered after basic functionality is complete.

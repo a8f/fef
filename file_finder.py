@@ -16,17 +16,17 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 """
 
-from ast import literal_eval
-from getpass import getpass
 import hashlib
-from io import BytesIO
 import os.path
 import shutil
 import subprocess
-from socket import gaierror
 import sys
+from ast import literal_eval
+from getpass import getpass
+from io import BytesIO
+from socket import gaierror
 from types import MethodType
-from typing import Optional, Dict, List, Tuple, Callable, Set
+from typing import Callable, Dict, List, Optional, Set, Tuple
 
 import paramiko
 
@@ -180,11 +180,11 @@ class FileFinder:
             )
 
         # Make hashing script if possible
-        script = self.create_hash_script()
-        if script is None:
+        self.remote_hash_script = self.create_hash_script()
+        if self.remote_hash_script is None:
             self.remote_hash = self.remote_hash_command_line
         else:
-            self.set_remote_hash_function_to_script(script)
+            self.set_remote_hash_function_to_script(self.remote_hash_script)
 
         """Dicts for tracking local file hashes"""
         # Dict of filesize->paths for all files of a certain size
@@ -197,11 +197,8 @@ class FileFinder:
         self.file_hashes = {}
 
     def generate_filesize_map(self) -> Dict[int, List[str]]:
-        print("generating filesize map for " + self.local_path)
-        print(os.listdir(self.local_path))
         sizes = {}
         for root, _, files in os.walk(self.local_path):
-            print("file", root, files)
             for file in files:
                 size = os.path.getsize(os.path.join(root, file))
                 if size in sizes:
@@ -403,6 +400,7 @@ with open(argv[1], 'rb') as file:
             same_size = self.file_sizes.get(stat.st_size)
             if same_size is None:
                 continue
+            # TODO the remote hashes can be computed asynchronously for all remote files
             rhash = self.remote_hash(self.remote_path_join(rpath, rfile))
             # TODO handle duplicate files
             for f in same_size:
@@ -438,6 +436,11 @@ with open(argv[1], 'rb') as file:
             self.move_file(old_path, new_path)
             # TODO add an option to specify what parts of stat to copy
             # TODO copy whatever parts of stat are specified (e.g. perms)
+
+        """Clean up"""
+        # Remove hash script from remote
+        if self.remote_hash_script is not None:
+            self.sftp.remove(self.remote_hash_script)
         return True
 
     def local_hash(self, file_path: str) -> str:
@@ -476,9 +479,7 @@ with open('{}', 'rb') as file:
 
     def local_path_from_remote(self, path: str) -> None:
         """
-        Creates the equivalent of path on the remote server as a directory
-        in the local server
-        Returns the equivalent local path
+        Returns the equivalent local path for path on remote
         """
         assert path.startswith(self.remote_path)
         split = path[len(self.remote_path) :].split("/")[1:]
@@ -490,15 +491,17 @@ with open('{}', 'rb') as file:
                     raise FileExistsError("Directory " + cur + " is a file")
         return cur
 
-    def create_local_path(self, path: str) -> None:
+    def create_path_for_file(self, file_path: str) -> None:
         """
-        Create all the parts of path
+        Create all the containing directories of file_path on the local machine
         """
-        dirs = path.split(os.path.sep)
+        dirs = file_path.split(os.path.sep)
         # TODO handle Windows-style paths (where dirs[0]/dirs[1] will be messed up
         # using this method since the drive letter is root)
-        cur = ""
-        for d in dirs:
+        cur = "/" if file_path[0] == "/" else ""
+        for d in dirs[:-1]:  # dirs[-1] is the file name
+            if len(d) == 0:
+                continue
             cur = os.path.join(cur, d)
             if not os.path.isdir(cur):
                 os.mkdir(cur)
@@ -521,5 +524,6 @@ with open('{}', 'rb') as file:
         Removes the directory of local_file_path if self.clean
         """
         # TODO
+        self.create_path_for_file(new_file_path)
         shutil.move(local_file_path, new_file_path)
-        print("move local file {} to {}".format(local_file_path, new_file_path))
+        self.log("Moved local file {} to {}".format(local_file_path, new_file_path))

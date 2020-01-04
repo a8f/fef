@@ -1,6 +1,8 @@
-from file_finder import FileFinder
 import mockssh
-from pytest import yield_fixture, fixture
+from pytest import fixture, yield_fixture
+
+from file_finder import FileFinder
+
 from .util import default_config, new_config
 
 

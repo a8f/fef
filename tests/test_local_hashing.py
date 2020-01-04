@@ -1,6 +1,7 @@
 import hashlib
 import os
-from .util import random_lines, SMALL_LINE_COUNT, LARGE_LINE_COUNT
+
+from .util import LARGE_LINE_COUNT, SMALL_LINE_COUNT, random_lines
 
 
 def test_small_local_file_sha1_hash(ssh_server, file_finder):
