@@ -40,7 +40,7 @@ class FileFinder:
         port: int,
         username: str,
         out_dir: str,
-        no_symlinks: bool,
+        symlinks: bool,
         hard: bool,
         keyfile: str,
         password: str,
@@ -125,7 +125,7 @@ class FileFinder:
             )
 
         """Link options (hard/soft)"""
-        self.symlink = not (hard or no_symlinks)
+        self.symlink = symlinks
         self.hardlink = hard
 
         """Authentication"""

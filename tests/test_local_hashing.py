@@ -1,19 +1,6 @@
 import hashlib
 import os
-import random
-from string import ascii_letters
-
-LINE_LENGTH = 1000
-SMALL_LINE_COUNT = 10000
-LARGE_LINE_COUNT = 100000
-
-
-def random_lines(num_lines: int) -> str:
-    """
-    Returns a string of num_lines strings of LINE_LENGTH random characters
-    delimited by newlines
-    """
-    return "\n".join([random.choice(ascii_letters) for i in range(num_lines)])
+from .util import random_lines, SMALL_LINE_COUNT, LARGE_LINE_COUNT
 
 
 def test_small_local_file_sha1_hash(ssh_server, file_finder):

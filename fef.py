@@ -80,10 +80,10 @@ def get_parser() -> argparse.ArgumentParser:
     )
     link_group = parser.add_mutually_exclusive_group()
     link_group.add_argument(
-        "-l",
-        "--no-symlinks",
+        "-s",
+        "--symlinks",
         action="store_false",
-        help="Don't create symbolic links when moving files",
+        help="Create symbolic links when moving files",
     )
     link_group.add_argument(
         "-d",

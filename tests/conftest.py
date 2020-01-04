@@ -1,7 +1,7 @@
 from file_finder import FileFinder
 import mockssh
 from pytest import yield_fixture, fixture
-from .config import default_config, new_config
+from .util import default_config, new_config
 
 
 @yield_fixture(scope="package")

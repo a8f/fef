@@ -15,8 +15,8 @@ to look for files in. To specify a directory to clone into (i.e. where you will 
 
 Other common flags are:
 
-    -s, --no-symlinks     Don't create symbolic links when moving files
-    -d, --hard            Create hard links instead of symbolic links when moving files
+    -s, --symlinks        Create symbolic links when moving files
+    -d, --hard            Create hard links when moving files
     -k <keyfile>          SSH key file to use for connecting to the host
 
 Full usage instructions can be found by running `./fef.py --help`

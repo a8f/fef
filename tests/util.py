@@ -1,6 +1,21 @@
 from random import randint
 import os
 import tempfile
+import random
+from string import ascii_letters
+
+LINE_LENGTH = 1000
+SMALL_LINE_COUNT = 10000
+LARGE_LINE_COUNT = 100000
+
+
+def random_lines(num_lines: int) -> str:
+    """
+    Returns a string of num_lines strings of LINE_LENGTH random characters
+    delimited by newlines
+    """
+    return "\n".join([random.choice(ascii_letters) for i in range(num_lines)])
+
 
 default_config = {
     "host": "127.0.0.1",
