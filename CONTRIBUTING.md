@@ -6,4 +6,8 @@ Code should be formatted with [Black](https://github.com/psf/black). Comments an
 
 ### Testing
 
-[PyTest](https://docs.pytest.org/en/latest/) is used for testing. Any additional features should have new tests added to ensure their continued functionality. All tests should be located in the `tests/` directory. **Tests should be run while in the top level `fef` directory.** To run all tests, use `pytest`. To run a specific test, use `pytest -q tests/testname.py`.
+[PyTest](https://docs.pytest.org/en/latest/) is used for testing. Tests are located in the `tests/` directory.
+
+To run tests, you will `pytest`, `paramiko`, and a [custom version of `mock-ssh-server`](https://github.com/a8f/mock-ssh-server/). You can install all requirements globally with `pip install -r tests/requirements.txt`.
+
+**Tests should be run while in the top level `fef` directory.** To run all tests, use `pytest`. To run a specific test, use `pytest -q tests/testname.py`.
