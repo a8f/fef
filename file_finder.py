@@ -50,7 +50,7 @@ class FileFinder:
         copy: bool,
         req_existing_hostkey: bool,
         no_local_keys: bool,
-        no_file_attributes: bool,
+        force_newer: bool,
     ):
         """
         Initialize class attributes, prompting the user for a password if required,
@@ -150,7 +150,7 @@ class FileFinder:
         self.clean = clean
         self.use_local_keys = not no_local_keys
         self.existing_hostkey = req_existing_hostkey
-        self.copy_file_attributes = not no_file_attributes
+        self.force_newer = force_newer
         # TODO add option to set these
         # Max #bytes of file to read into memory at once
         self.read_size = 2 ** 16  # 64k
@@ -435,7 +435,8 @@ with open(argv[1], 'rb') as file:
         for new_path, (old_path, stat) in files_to_move.items():
             self.move_file(old_path, new_path)
             # TODO add an option to specify what parts of stat to copy
-            # TODO copy whatever parts of stat are specified (e.g. perms)
+            if self.force_newer:
+                os.utime(new_path, (stat.st_atime + 1, stat.st_mtime + 1))
 
         """Clean up"""
         # Remove hash script from remote

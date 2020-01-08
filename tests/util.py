@@ -26,7 +26,7 @@ default_config = {
     "copy": False,
     "req_existing_hostkey": False,
     "no_local_keys": False,
-    "no_file_attributes": False,
+    "force_newer": False,
 }
 
 

@@ -17,7 +17,6 @@ def test_small_sha1_move(ssh_server, file_finder):
     remote_path = os.path.join(file_finder.remote_path, "test_remote_file.txt")
     shutil.copyfile(local_path, remote_path)
     moved_path = os.path.join(file_finder.out_path, "test_remote_file.txt")
-    print(moved_path)
     file_finder.run()
     # File was matched and moved successfully
     assert len(os.listdir(file_finder.out_path)) == 1
@@ -29,6 +28,36 @@ def test_small_sha1_move(ssh_server, file_finder):
             hasher.update(l)
     os.remove(moved_path)
     assert hasher.hexdigest() == true_hash
+
+
+def test_force_newer(ssh_server, file_finder):
+    """Check that the time is actually newer than the remote file"""
+    file_finder.force_newer = True
+    text = random_lines(SMALL_LINE_COUNT)
+    hasher = hashlib.sha1()
+    hasher.update(text.encode())
+    true_hash = hasher.hexdigest()
+    local_path = os.path.join(file_finder.local_path, "test_local_file.txt")
+    with open(local_path, "w") as file:
+        file.write(text)
+    remote_path = os.path.join(file_finder.remote_path, "test_remote_file.txt")
+    shutil.copyfile(local_path, remote_path)
+    moved_path = os.path.join(file_finder.out_path, "test_remote_file.txt")
+    file_finder.run()
+    # File was matched and moved successfully
+    assert len(os.listdir(file_finder.out_path)) == 1
+    assert os.path.isfile(moved_path)
+    # Correct file was moved
+    hasher = hashlib.sha1()
+    with open(moved_path, "rb") as file:
+        for l in file.readlines():
+            hasher.update(l)
+    assert hasher.hexdigest() == true_hash
+    moved_stat = os.stat(moved_path)
+    remote_stat = os.stat(remote_path)
+    assert moved_stat.st_atime >= remote_stat.st_atime
+    assert moved_stat.st_mtime >= remote_stat.st_mtime
+    os.remove(moved_path)
 
 
 def test_large_sha1_move(ssh_server, file_finder):

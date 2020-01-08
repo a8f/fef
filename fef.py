@@ -147,11 +147,10 @@ def get_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "-n",
-        "--no-file-attributes",
+        "--force-newer",
         action="store_true",
-        help="Don't update file permissions and access time to match remote server."
-        "This will cause rsync to download files that have an older modification date"
-        " or different file permissions on the local machine",
+        help="Always update the modification and access time of local files to be "
+        "more recent than remote files (so that rsync will not overwrite them)",
     )
     parser.add_argument(
         "--req-existing-hostkey",
