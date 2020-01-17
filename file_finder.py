@@ -16,6 +16,7 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 """
 
+import errno
 import hashlib
 import os.path
 import shutil
@@ -51,6 +52,7 @@ class FileFinder:
         req_existing_hostkey: bool,
         no_local_keys: bool,
         force_newer: bool,
+        log_file: str,
     ):
         """
         Initialize class attributes, prompting the user for a password if required,
@@ -144,6 +146,26 @@ class FileFinder:
             self.set_local_hash_func(getattr(hashlib, hash_function))
         except AttributeError:
             raise ValueError("Unsupported hash function " + hash_function)
+
+        """Logging location"""
+        if log_file == "stdout":
+            self.log_file = sys.stdout
+        elif log_file == "stderr":
+            self.log_file = sys.stderr
+        else:
+            # Don't need to validate log location if we are supressing all output
+            if verbosity > 0:
+                if os.path.isdir(log_file):
+                    raise ValueError("Log file " + +log_file + " is a directory")
+                else:
+                    try:
+                        self.log_file = open(log_file, "a+")
+                    except PermissionError as e:
+                        raise ValueError(
+                            "Permission error when opening log file "
+                            + log_file
+                            + " ({})".format(str(e))
+                        )
 
         """Remaining options"""
         self.verbosity = verbosity
@@ -249,9 +271,9 @@ print(algorithms_available)" """
         """
         Log a message to stdout if verbosity > 1
         """
-        # TODO support log files
-        if self.verbosity > 1:
-            print(msg, **kwargs)
+        if self.verbosity <= 1:
+            return
+        print(msg, file=self.log_file, **kwargs)
 
     def create_hash_script(self) -> Optional[str]:
         """
@@ -260,11 +282,12 @@ print(algorithms_available)" """
         create the script
         """
         # Find filename that doesn't exist
-        # TODO handle not having read permissions
         exists = True
         try:
             self.sftp.stat(self.remote_path_join(self.remote_path, "/hash.py"))
-        except IOError:
+        except IOError as e:
+            if e.errno == errno.EPERM:
+                return None
             exists = False
         suffix = 0
         while exists:
@@ -277,8 +300,10 @@ print(algorithms_available)" """
             except IOError:
                 exists = False
         filename = self.remote_path_join(self.remote_path, "hash" + str(suffix) + ".py")
-        # TODO handle not having write permissions
-        self.sftp.putfo(BytesIO(self.get_hash_script_body().encode()), filename)
+        try:
+            self.sftp.putfo(BytesIO(self.get_hash_script_body().encode()), filename)
+        except IOError:
+            return None
         return filename
 
     def get_hash_script_body(self) -> str:
@@ -305,7 +330,7 @@ with open(argv[1], 'rb') as file:
         If self.keyfile and self.password are None and there is no key found through
         the SSH agent or in ~/.ssh then prompts the user for a password to
         save to self.password and connect with
-        :return error message on connection failure or None on success
+        Returns error message on connection failure or None on success
         """
         self.log(
             "Connecting to %s:%d as %s" % (self.hostname, self.port, self.username),
@@ -363,6 +388,11 @@ with open(argv[1], 'rb') as file:
         except gaierror as e:
             return str(e) + " (" + self.hostname + ")"
         self.sftp = self.ssh.open_sftp()
+        # Check that self.remote_path is valid and readable
+        try:
+            self.sftp.stat(self.remote_path)
+        except IOError as e:
+            return str(e)
 
     def set_remote_hash_function_to_script(self, script_remote_path: str) -> None:
         # Create hash function
@@ -434,7 +464,6 @@ with open(argv[1], 'rb') as file:
         """Actually move the files"""
         for new_path, (old_path, stat) in files_to_move.items():
             self.move_file(old_path, new_path)
-            # TODO add an option to specify what parts of stat to copy
             if self.force_newer:
                 os.utime(new_path, (stat.st_atime + 1, stat.st_mtime + 1))
 
@@ -524,7 +553,10 @@ with open('{}', 'rb') as file:
         leaving a symbolic or hard link as specified by self.symlink and self.hardlink
         Removes the directory of local_file_path if self.clean
         """
-        # TODO
         self.create_path_for_file(new_file_path)
         shutil.move(local_file_path, new_file_path)
+        if self.symlink:
+            os.symlink(new_file_path, local_file_path)
+        elif self.hardlink:
+            os.link(new_file_path, local_file_path)
         self.log("Moved local file {} to {}".format(local_file_path, new_file_path))

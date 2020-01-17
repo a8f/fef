@@ -153,6 +153,12 @@ def get_parser() -> argparse.ArgumentParser:
         "more recent than remote files (so that rsync will not overwrite them)",
     )
     parser.add_argument(
+        "-l",
+        "--log-file",
+        default="stdout",
+        help='File to log to or "stdout" or "stderr"',
+    )
+    parser.add_argument(
         "--req-existing-hostkey",
         action="store_true",
         help="Only connect if the host is already in the system's host keys "
